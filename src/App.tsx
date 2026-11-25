@@ -1,6 +1,17 @@
+import { lazy, Suspense } from 'react'
 import { configurado } from './lib/supabase'
-import Cardapio from './pages/Cardapio'
-import Painel from './pages/Painel'
+
+// cada tela baixa só o código dela (o cliente não baixa o painel e vice-versa)
+const Cardapio = lazy(() => import('./pages/Cardapio'))
+const Painel = lazy(() => import('./pages/Painel'))
+
+function Carregando() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-creme">
+      <div className="h-8 w-8 rounded-full border-4 border-salvia border-t-verde girar" />
+    </div>
+  )
+}
 
 export default function App() {
   if (!configurado) {
@@ -15,5 +26,5 @@ export default function App() {
       </div>
     )
   }
-  return window.location.pathname.startsWith('/painel') ? <Painel /> : <Cardapio />
+  return <Suspense fallback={<Carregando />}>{window.location.pathname.startsWith('/painel') ? <Painel /> : <Cardapio />}</Suspense>
 }

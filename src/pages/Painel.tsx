@@ -29,7 +29,7 @@ export default function Painel() {
     supabase.rpc('eh_equipe').then(({ data }) => setEquipe(Boolean(data)))
   }, [sessao])
 
-  if (!pronto) return null
+  if (!pronto) return <div className="flex min-h-screen items-center justify-center bg-fundo"><div className="h-8 w-8 rounded-full border-4 border-borda border-t-verde girar" /></div>
   if (!sessao) return <Login />
   if (equipe === null) return <div className="flex min-h-screen items-center justify-center bg-fundo"><div className="h-8 w-8 rounded-full border-4 border-borda border-t-verde girar" /></div>
   if (!equipe)
