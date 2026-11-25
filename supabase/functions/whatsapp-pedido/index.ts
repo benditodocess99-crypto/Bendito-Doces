@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
   const id = String(corpo.id ?? "");
   if (!/^[0-9a-f-]{36}$/.test(id)) return json({ erro: "id inválido" }, 400);
   const { data: p, error } = await sb.from("pedidos").select("*").eq("id", id).single();
-  if (error || !p) return json({ erro: "pedido não encontrado" }, 404);
+  if (error || !p) return json({ erro: "pedido não encontrado", detalhe: error?.message, chave: (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "").slice(0, 6) }, 404);
 
   // pedido novo: avisa a loja (uma vez só)
   if (p.status === "analise" && !p.push_enviado) {
