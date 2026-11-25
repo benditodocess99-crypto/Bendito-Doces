@@ -57,6 +57,7 @@ button:disabled { cursor: default; opacity: .6; }
 /* recibo para impressora térmica (80mm) */
 @media print {
   body * { visibility: hidden; }
-  #recibo, #recibo * { visibility: visible; }
+  #recibo, #recibo *, #relatorio, #relatorio * { visibility: visible; }
   #recibo { position: absolute; left: 0; top: 0; width: 72mm; }
+  #relatorio { position: absolute; left: 0; top: 0; width: 100%; }
 }

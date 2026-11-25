@@ -1,6 +1,7 @@
 // Bendito · envia as mensagens automáticas do pedido pelo WhatsApp oficial (Meta)
 // Chamado pelo banco (gatilho) sempre que um pedido é criado ou muda de status.
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import webpush from "npm:web-push@3.6.7";
 
 const GRAPH = "https://graph.facebook.com/v25.0";
 const PHONE_ID = Deno.env.get("WHATSAPP_PHONE_ID") ?? "1467666003096863";
@@ -30,15 +31,57 @@ async function graph(path: string, body?: unknown) {
   return { ok: r.ok, data: await r.json().catch(() => ({})) };
 }
 
+// ---- notificação (push) para os aparelhos da loja ----
+let vapidPronto = false;
+async function prepararVapid() {
+  if (vapidPronto) return true;
+  const { data } = await sb.from("config_privada").select("chave,valor").in("chave", ["vapid_publica", "vapid_privada"]);
+  const pub = data?.find((x) => x.chave === "vapid_publica")?.valor;
+  const priv = data?.find((x) => x.chave === "vapid_privada")?.valor;
+  if (!pub || !priv) return false;
+  webpush.setVapidDetails("mailto:contato@bendito.app", pub, priv);
+  vapidPronto = true;
+  return true;
+}
+
+async function notificarLoja(msg: { title: string; body: string; tag: string }, soEndpoint?: string) {
+  if (!(await prepararVapid())) return 0;
+  let q = sb.from("push_inscricoes").select("*");
+  if (soEndpoint) q = q.eq("endpoint", soEndpoint);
+  const { data: subs } = await q;
+  let ok = 0;
+  for (const s of subs ?? []) {
+    try {
+      await webpush.sendNotification(
+        { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+        JSON.stringify({ ...msg, url: "/painel/" }),
+        { TTL: 3600, urgency: "high" },
+      );
+      ok++;
+    } catch (e) {
+      const st = (e as { statusCode?: number }).statusCode;
+      if (st === 404 || st === 410) await sb.from("push_inscricoes").delete().eq("id", s.id);
+      else console.error("push falhou", st, String(e));
+    }
+  }
+  return ok;
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ erro: "use POST" }, 405);
-  if (!TOKEN) return json({ erro: "WHATSAPP_TOKEN não configurado" }, 500);
   const corpo = await req.json().catch(() => ({}));
+
+  // botão "Enviar teste" do painel: só manda para o próprio aparelho (precisa estar cadastrado)
+  if (corpo.acao === "teste_push") {
+    const n = await notificarLoja({ title: "Bendito · Painel", body: "Notificações funcionando neste aparelho ✓", tag: "teste" }, String(corpo.endpoint ?? "-"));
+    return json({ enviados: n });
+  }
 
   // ---- utilitários de configuração (rodados uma vez) ----
   if (corpo.acao === "diag") {
     return json({ tamanho: TOKEN.length, comeca_com_EAA: TOKEN.startsWith("EAA"), so_letras_numeros: /^[A-Za-z0-9]+$/.test(TOKEN) });
   }
+  if (!TOKEN && corpo.acao) return json({ erro: "WHATSAPP_TOKEN não configurado" }, 500);
   if (corpo.acao === "criar_modelos") {
     const res = [];
     for (const m of MODELOS) {
@@ -60,7 +103,17 @@ Deno.serve(async (req) => {
   if (!/^[0-9a-f-]{36}$/.test(id)) return json({ erro: "id inválido" }, 400);
   const { data: p, error } = await sb.from("pedidos").select("*").eq("id", id).single();
   if (error || !p) return json({ erro: "pedido não encontrado" }, 404);
+
+  // pedido novo: avisa a loja (uma vez só)
+  if (p.status === "analise" && !p.push_enviado) {
+    await sb.from("pedidos").update({ push_enviado: true }).eq("id", id);
+    const onde = p.tipo === "entrega" ? "Entrega" : p.tipo === "mesa" ? `Mesa ${String(p.mesa ?? "").padStart(2, "0")}` : "Retirada";
+    const itens = (p.itens ?? []).map((i: { qtd: number; nome: string }) => `${i.qtd}x ${i.nome}`).join(", ");
+    await notificarLoja({ title: `🔔 Novo pedido #${p.numero} · ${brl(p.total)}`, body: `${p.cliente_nome} · ${onde}\n${itens}`.slice(0, 180), tag: `pedido-${p.numero}` });
+  }
+
   if (!p.cliente_whatsapp) return json({ pulado: "sem whatsapp" });
+  if (!TOKEN) return json({ pulado: "whatsapp sem token" });
   const enviados: string[] = p.wa_enviado ?? [];
   if (enviados.includes(p.status)) return json({ pulado: "já enviado" });
 

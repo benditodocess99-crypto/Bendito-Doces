@@ -5,8 +5,9 @@ import { erroMsg } from '../lib/util'
 import Pedidos from './painel/Pedidos'
 import Produtos from './painel/Produtos'
 import LojaConfig from './painel/LojaConfig'
+import Caixa from './painel/Caixa'
 
-type Aba = 'pedidos' | 'produtos' | 'loja'
+type Aba = 'pedidos' | 'caixa' | 'produtos' | 'loja'
 
 export default function Painel() {
   const [sessao, setSessao] = useState<Session | null>(null)
@@ -41,11 +42,11 @@ export default function Painel() {
 
   return (
     <div className="flex h-dvh flex-col bg-fundo">
-      <header className="flex flex-wrap items-center gap-3 border-b border-borda bg-white px-4 py-2.5">
+      <header className="flex flex-wrap items-center gap-3 border-b border-borda bg-white px-4 py-2.5 print:hidden">
         <img src="/logo.jpg" alt="" className="h-9 w-9 rounded-full object-cover" />
         <b className="text-[15px]">Bendito · Painel</b>
         <nav className="ml-2 flex gap-1 rounded-xl bg-fundo p-1">
-          {([['pedidos', '📋 Pedidos'], ['produtos', '🍰 Produtos'], ['loja', '⚙️ Loja']] as [Aba, string][]).map(([a, t]) => (
+          {([['pedidos', '📋 Pedidos'], ['caixa', '💰 Caixa'], ['produtos', '🍰 Produtos'], ['loja', '⚙️ Loja']] as [Aba, string][]).map(([a, t]) => (
             <button key={a} onClick={() => setAba(a)} className={`rounded-lg px-3 py-1.5 text-[13px] font-semibold ${aba === a ? 'bg-white text-verde shadow-sm' : 'text-mudo'}`}>{t}</button>
           ))}
         </nav>
@@ -53,6 +54,7 @@ export default function Painel() {
       </header>
       <div className="min-h-0 flex-1">
         {aba === 'pedidos' && <Pedidos />}
+        {aba === 'caixa' && <Caixa />}
         {aba === 'produtos' && <Produtos />}
         {aba === 'loja' && <LojaConfig />}
       </div>

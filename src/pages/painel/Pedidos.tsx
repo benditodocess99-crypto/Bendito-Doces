@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { supabase, num, type Pedido, type StatusPedido } from '../../lib/supabase'
 import { brl, foneBonito, haQuanto, hora, liberarSom, tocar, ORIGEM, PAGAMENTO, erroMsg } from '../../lib/util'
+import { ativarPush, desligarPush, testarPush, verificarPush, temNotificacao, type EstadoPush } from '../../lib/push'
 
 const COLUNAS: { st: StatusPedido; nome: string; cor: string; fundo: string }[] = [
   { st: 'analise', nome: 'Em análise', cor: 'text-c1', fundo: 'bg-c1b' },
@@ -41,6 +42,13 @@ export default function Pedidos() {
   const [conexao, setConexao] = useState<'ok' | 'caiu'>('ok')
   const somRef = useRef(som)
   somRef.current = som
+  const [push, setPush] = useState<EstadoPush>('verificando')
+  const pushRef = useRef(push)
+  pushRef.current = push
+
+  useEffect(() => {
+    verificarPush().then(setPush)
+  }, [])
 
   const carregar = useCallback(async () => {
     const { data, error } = await supabase
@@ -67,6 +75,14 @@ export default function Pedidos() {
         setPedidos((ps) => (ps.some((p) => p.id === novo.id) ? ps : [...ps, novo]))
         if (somRef.current) tocar([988, 1319, 988])
         mostrar(`🔔 Novo pedido #${novo.numero} · ${brl(novo.total)}`)
+        // aba em segundo plano e sem push ativo: mostra aviso do navegador
+        if (document.hidden && pushRef.current !== 'ativo' && temNotificacao() && Notification.permission === 'granted') {
+          try {
+            new Notification(`🔔 Novo pedido #${novo.numero} · ${brl(novo.total)}`, { body: novo.cliente_nome, icon: '/icone-192.png', tag: 'pedido-' + novo.numero })
+          } catch {
+            /* alguns celulares só aceitam pelo service worker */
+          }
+        }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pedidos' }, (msg) => {
         const at = normalizar(msg.new as Pedido)
@@ -176,6 +192,7 @@ export default function Pedidos() {
           👆 Toque aqui uma vez para liberar o som dos pedidos (o navegador exige)
         </button>
       )}
+      <AvisoPush estado={push} setEstado={setPush} mostrar={mostrar} />
       {erro && <div className="mx-3 mt-2 rounded-xl bg-c1b p-2.5 text-sm text-c1">{erro}</div>}
 
       {/* colunas */}
@@ -208,6 +225,46 @@ export default function Pedidos() {
 
       {aviso && <div className="subir absolute left-1/2 top-3 z-30 -translate-x-1/2 whitespace-nowrap rounded-2xl bg-tinta px-5 py-3 text-sm font-bold text-white shadow-xl">{aviso}</div>}
       {imprimir && <Recibo p={imprimir} />}
+    </div>
+  )
+}
+
+function AvisoPush({ estado, setEstado, mostrar }: { estado: EstadoPush; setEstado: (e: EstadoPush) => void; mostrar: (t: string) => void }) {
+  const [ocupado, setOcupado] = useState(false)
+  if (estado === 'verificando' || estado === 'sem_suporte') return null
+  const caixa = 'mx-3 mt-2 flex flex-wrap items-center gap-2 rounded-xl px-3 py-2 text-sm'
+  if (estado === 'ativo')
+    return (
+      <div className={`${caixa} bg-c4b text-c4`}>
+        <span className="flex-1 font-semibold">🔔 Notificações ativas neste aparelho (chegam mesmo com o painel fechado)</span>
+        <button disabled={ocupado} onClick={async () => { setOcupado(true); const n = await testarPush(); setOcupado(false); mostrar(n ? '✓ Teste enviado' : '⚠️ Não consegui enviar o teste') }} className="rounded-lg bg-white px-2.5 py-1 text-xs font-bold">Enviar teste</button>
+        <button onClick={async () => { await desligarPush(); setEstado('inativo') }} className="text-xs font-semibold underline">Desligar</button>
+      </div>
+    )
+  if (estado === 'instalar')
+    return <div className={`${caixa} bg-c2b text-[#8a5a10]`}>📲 No iPhone: toque em <b>Compartilhar → Adicionar à Tela de Início</b>, abra o painel pelo ícone e ative as notificações.</div>
+  if (estado === 'bloqueado')
+    return <div className={`${caixa} bg-c1b text-c1`}>🔕 As notificações estão bloqueadas neste navegador. Libere no cadeado ao lado do endereço do site e recarregue.</div>
+  return (
+    <div className={`${caixa} bg-c3b text-c3`}>
+      <span className="flex-1 font-semibold">Receba um aviso no celular/PC a cada pedido novo, mesmo com o painel fechado.</span>
+      <button
+        disabled={ocupado}
+        onClick={async () => {
+          setOcupado(true)
+          try {
+            const e = await ativarPush()
+            setEstado(e)
+            if (e === 'ativo') mostrar('✓ Notificações ativadas')
+          } catch (err) {
+            mostrar('⚠️ ' + erroMsg(err))
+          }
+          setOcupado(false)
+        }}
+        className="rounded-lg bg-c3 px-3 py-1.5 text-xs font-bold text-white"
+      >
+        {ocupado ? 'Ativando…' : '🔔 Ativar notificações'}
+      </button>
     </div>
   )
 }
