@@ -5,7 +5,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 const GRAPH = "https://graph.facebook.com/v25.0";
 const PHONE_ID = Deno.env.get("WHATSAPP_PHONE_ID") ?? "1467666003096863";
 const WABA_ID = Deno.env.get("WHATSAPP_WABA_ID") ?? "2773107789773793";
-const TOKEN = Deno.env.get("WHATSAPP_TOKEN") ?? "";
+const TOKEN = (Deno.env.get("WHATSAPP_TOKEN") ?? "").replace(/\s+/g, "").replace(/^["']+|["']+$/g, "").replace(/^Bearer/i, "");
 const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
 // Modelos de mensagem (precisam ser aprovados pela Meta antes de enviar)
@@ -36,6 +36,9 @@ Deno.serve(async (req) => {
   const corpo = await req.json().catch(() => ({}));
 
   // ---- utilitários de configuração (rodados uma vez) ----
+  if (corpo.acao === "diag") {
+    return json({ tamanho: TOKEN.length, comeca_com_EAA: TOKEN.startsWith("EAA"), so_letras_numeros: /^[A-Za-z0-9]+$/.test(TOKEN) });
+  }
   if (corpo.acao === "criar_modelos") {
     const res = [];
     for (const m of MODELOS) {
