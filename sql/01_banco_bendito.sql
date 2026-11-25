@@ -90,7 +90,7 @@ create index if not exists pedidos_criado_idx on public.pedidos(criado_em desc);
 create index if not exists pedidos_status_idx on public.pedidos(status);
 
 create or replace function public.tg_pedido_atualizado()
-returns trigger language plpgsql as $$
+returns trigger language plpgsql set search_path = public as $$
 begin new.atualizado_em := now(); return new; end $$;
 drop trigger if exists pedido_atualizado on public.pedidos;
 create trigger pedido_atualizado before update on public.pedidos
@@ -205,6 +205,12 @@ language sql stable security definer set search_path = public as $$
   select numero, status, tipo, mesa, total, itens, forma_pagamento, criado_em, atualizado_em, motivo_recusa
   from public.pedidos where id = p_id;
 $$;
+
+-- acesso da API (o RLS acima continua valendo)
+grant usage on schema public to anon, authenticated;
+grant select on public.loja, public.categorias, public.produtos to anon, authenticated;
+grant select, insert, update, delete on public.loja, public.equipe, public.categorias, public.produtos, public.pedidos to authenticated;
+grant usage, select on sequence public.pedido_numero_seq to authenticated;
 
 grant execute on function public.criar_pedido(jsonb) to anon, authenticated;
 grant execute on function public.acompanhar_pedido(uuid) to anon, authenticated;
